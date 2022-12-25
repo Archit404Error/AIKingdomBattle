@@ -95,7 +95,7 @@ class Kingdom:
             self.gainTile(tile)
 
     def expand(self):
-        finalList = self.land[len(self.land) - 1].loc
+        finalList = self.land[-1].loc
         available = []
         available.append(
             next((x for x in board if x.loc == [finalList[0] + 1, finalList[1]]), None)
@@ -244,6 +244,7 @@ def run_game():
                             "OK",
                             f"""
                             Land Tiles: {len(king.tile_posns)}
+                            Tile on Map: {screenWidth * screenHeight / 100}
                             Strength: {king.strength}
                             Piety: {king.piety}
                             Pacificity: {king.pacificity}
