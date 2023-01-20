@@ -6,8 +6,10 @@ from tkinter import Tk, messagebox
 
 import pygame
 
-screenWidth = 800
-screenHeight = 600
+screen_width = 800
+screen_height = 600
+tile_width = 60
+tile_height = 60
 board = []
 
 
@@ -57,30 +59,37 @@ class Kingdom:
         offsets = [1, 0, -1, 0, 1, 1, -1, -1, 1]
         for i in range(len(offsets) - 1):
             if (
-                0 <= (xn := x + offsets[i]) < 60
-                and 0 <= (yn := y + offsets[i + 1]) < 60
+                0 <= (xn := x + offsets[i]) < len(board)
+                and 0 <= (yn := y + offsets[i + 1]) < len(board[0])
                 and (ntile := board[xn][yn]).owner != self
             ):
                 self.edge_tiles.add(ntile)
 
-    def loseTile(self, tile: Tile):
+    def capitulate(self):
+        self.alive = False
+        self.land = []
+        self.tile_posns = set()
+        self.strength = 0
+        self.piety = 0
+        self.edge_tiles = set()
+
+    def lose_tile(self, tile: Tile):
         self.strength -= uniform(1.0, 10.0)
         self.tile_posns.remove(tile.pos)
         self.land.pop(self.land.index(tile))
 
-    def gainTile(self, tile: Tile):
+    def gain_tile(self, tile: Tile):
         if tile in self.edge_tiles:
             self.edge_tiles.remove(tile)
         tile.changeColor(self.color)
         tile.occupied = True
-        if tile.owner != self:
-            self.strength += uniform(1.0, 10.0)
+        self.strength += uniform(1.0, 10.0)
         tile.owner = self
         self.land.append(tile)
         self.tile_posns.add(tile.pos)
         self.add_edge_tiles(tile)
 
-    def tileBattle(self, tile: Tile):
+    def tile_battle(self, tile: Tile):
         if tile.occupied and tile.owner != self:
             self.battles += 1
             if (
@@ -89,24 +98,20 @@ class Kingdom:
             ):
                 self.wins += 1
                 if not tile.capital:
-                    self.gainTile(tile)
-                    tile.owner.loseTile(tile)
+                    tile.owner.lose_tile(tile)
+                    self.gain_tile(tile)
                 else:
                     tile.capital = False
                     tile.changeColor(self.color)
-                    tile.owner.alive = False
                     old_owner = tile.owner
                     for t in tile.owner.land:
-                        self.gainTile(t)
-                    old_owner.land = []
-                    old_owner.tile_posns = set()
-                    old_owner.strength = 0
-                    old_owner.piety = 0
+                        self.gain_tile(t)
+                    old_owner.capitulate()
             else:
                 self.strength = floor(0.9 * self.strength)
                 self.piety = floor(0.95 * self.piety)
         else:
-            self.gainTile(tile)
+            self.gain_tile(tile)
 
     def expand(self):
         to_expand = None
@@ -115,16 +120,16 @@ class Kingdom:
         shuffle(rearranged)
         for edge in rearranged:
             if not edge.occupied:
-                self.tileBattle(edge)
+                self.tile_battle(edge)
                 return
             if edge.capital:
-                self.tileBattle(edge)
+                self.tile_battle(edge)
                 return
-            if edge.owner.strength < min_str:
+            if edge.owner.strength <= min_str:
                 min_str = edge.owner.strength
                 to_expand = edge
         if to_expand:
-            self.tileBattle(to_expand)
+            self.tile_battle(to_expand)
 
     def pray(self):
         self.piety += uniform(0.1, 1)
@@ -183,20 +188,20 @@ def render_high_scores(king: Kingdom, i, font, screen):
     )
 
 
-def run_game():
+def run_game(num_kings):
     Tk().wm_withdraw()
     pygame.init()
     pygame.display.set_caption("AI Kingdom Battle")
-    screen = pygame.display.set_mode((screenWidth, screenHeight))
+    screen = pygame.display.set_mode((screen_width, screen_height))
     clock = pygame.time.Clock()
 
-    for i in range(60):
+    for i in range(tile_width):
         board.append([])
-        for j in range(60):
+        for j in range(tile_height):
             board[i].append(Tile([i, j], (0, 0, 0)))
 
     kingdoms = []
-    for i in range(100):
+    for i in range(num_kings):
         kingdoms.append(
             Kingdom(board[randint(0, len(board) - 1)][randint(0, len(board[0]) - 1)])
         )
@@ -224,7 +229,7 @@ def run_game():
                             "OK",
                             f"""
                             Land Tiles: {len(king.tile_posns)}
-                            Tile on Map: {screenWidth * screenHeight / 100}
+                            Tiles on Map: {tile_width * tile_height}
                             Strength: {king.strength}
                             Piety: {king.piety}
                             Pacificity: {king.pacificity}
@@ -240,9 +245,12 @@ def run_game():
 
         for king in kingdoms:
             if king.alive:
+                if len(king.land) == 1 and king.wins > 10:
+                    king.alive = False
+                    continue
                 king.move()
 
-        pygame.draw.rect(screen, (0, 0, 0), (600, 0, screenWidth, screenHeight))
+        pygame.draw.rect(screen, (0, 0, 0), (600, 0, screen_width, screen_height))
         to_rank = top_kings(kingdoms)
         for i, king in enumerate(to_rank):
             if i < len(crowns):
@@ -254,4 +262,4 @@ def run_game():
 
 
 if __name__ == "__main__":
-    run_game()
+    run_game(20)
