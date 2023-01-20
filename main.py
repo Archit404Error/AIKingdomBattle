@@ -35,6 +35,7 @@ class Tile:
 class Kingdom:
     def __init__(self, startTile: Tile):
         self.land = [startTile]
+        self.edge_tiles = set()
         self.tile_posns = set([startTile.pos])
         self.capital_pos = startTile.pos
         self.strength = randint(1, 5)
@@ -49,6 +50,18 @@ class Kingdom:
         startTile.occupied = True
         startTile.capital = True
         startTile.owner = self
+        self.add_edge_tiles(startTile)
+
+    def add_edge_tiles(self, tile: Tile):
+        x, y = tile.loc
+        offsets = [1, 0, -1, 0, 1, 1, -1, -1, 1]
+        for i in range(len(offsets) - 1):
+            if (
+                0 <= (xn := x + offsets[i]) < 60
+                and 0 <= (yn := y + offsets[i + 1]) < 60
+                and (ntile := board[xn][yn]).owner != self
+            ):
+                self.edge_tiles.add(ntile)
 
     def loseTile(self, tile: Tile):
         self.strength -= uniform(1.0, 10.0)
@@ -56,14 +69,16 @@ class Kingdom:
         self.land.pop(self.land.index(tile))
 
     def gainTile(self, tile: Tile):
-        if not tile.capital:
-            tile.changeColor(self.color)
-            tile.occupied = True
-            if tile.owner != self:
-                self.strength += uniform(1.0, 10.0)
-            tile.owner = self
-            self.land.append(tile)
-            self.tile_posns.add(tile.pos)
+        if tile in self.edge_tiles:
+            self.edge_tiles.remove(tile)
+        tile.changeColor(self.color)
+        tile.occupied = True
+        if tile.owner != self:
+            self.strength += uniform(1.0, 10.0)
+        tile.owner = self
+        self.land.append(tile)
+        self.tile_posns.add(tile.pos)
+        self.add_edge_tiles(tile)
 
     def tileBattle(self, tile: Tile):
         if tile.occupied and tile.owner != self:
@@ -90,63 +105,26 @@ class Kingdom:
             else:
                 self.strength = floor(0.9 * self.strength)
                 self.piety = floor(0.95 * self.piety)
-                shuffle(self.land)
         else:
             self.gainTile(tile)
 
     def expand(self):
-        finalList = self.land[-1].loc
-        available = []
-        available.append(
-            next((x for x in board if x.loc == [finalList[0] + 1, finalList[1]]), None)
-        )
-        available.append(
-            next((x for x in board if x.loc == [finalList[0] - 1, finalList[1]]), None)
-        )
-        available.append(
-            next((x for x in board if x.loc == [finalList[0], finalList[1] - 1]), None)
-        )
-        available.append(
-            next((x for x in board if x.loc == [finalList[0], finalList[1] + 1]), None)
-        )
-        available.append(
-            next(
-                (x for x in board if x.loc == [finalList[0] + 1, finalList[1] + 1]),
-                None,
-            )
-        )
-        available.append(
-            next(
-                (x for x in board if x.loc == [finalList[0] - 1, finalList[1] + 1]),
-                None,
-            )
-        )
-        available.append(
-            next(
-                (x for x in board if x.loc == [finalList[0] + 1, finalList[1] - 1]),
-                None,
-            )
-        )
-        available.append(
-            next(
-                (x for x in board if x.loc == [finalList[0] - 1, finalList[1] - 1]),
-                None,
-            )
-        )
-
-        available = list(filter((None), available))
-        notselfowned = []
-        for t in available:
-            if t.owner != self:
-                notselfowned.append(t)
-        for i in range(len(available) - 1):
-            if len(notselfowned) == 0:
-                tile = available[randint(0, len(available) - 1)]
-            else:
-                tile = notselfowned[randint(0, len(notselfowned) - 1)]
-                notselfowned.pop(notselfowned.index(tile))
-            self.tileBattle(tile)
-            available.pop(available.index(tile))
+        to_expand = None
+        min_str = float("inf")
+        rearranged = list(self.edge_tiles)
+        shuffle(rearranged)
+        for edge in rearranged:
+            if not edge.occupied:
+                self.tileBattle(edge)
+                return
+            if edge.capital:
+                self.tileBattle(edge)
+                return
+            if edge.owner.strength < min_str:
+                min_str = edge.owner.strength
+                to_expand = edge
+        if to_expand:
+            self.tileBattle(to_expand)
 
     def pray(self):
         self.piety += uniform(0.1, 1)
@@ -213,13 +191,15 @@ def run_game():
     clock = pygame.time.Clock()
 
     for i in range(60):
+        board.append([])
         for j in range(60):
-            loc = [i, j]
-            board.append(Tile(loc, (0, 0, 0)))
+            board[i].append(Tile([i, j], (0, 0, 0)))
 
     kingdoms = []
     for i in range(100):
-        kingdoms.append(Kingdom(board[randint(0, len(board) - 1)]))
+        kingdoms.append(
+            Kingdom(board[randint(0, len(board) - 1)][randint(0, len(board[0]) - 1)])
+        )
 
     font = pygame.font.SysFont(None, 24)
 
@@ -254,8 +234,9 @@ def run_game():
                         break
         clock.tick(60)
 
-        for tile in board:
-            tile.draw(screen)
+        for row in board:
+            for tile in row:
+                tile.draw(screen)
 
         for king in kingdoms:
             if king.alive:
